@@ -1,0 +1,4 @@
+# MANIFEST.in
+recursive-include go *.go go.mod go.sum
+include README.md
+include LICENSE

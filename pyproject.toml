@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pggo"
+version = "0.0.1"
+authors = [
+  { name="Lucas Lima Fernandes", email="lucas.lfernandes@live.com" },
+]
+
+description = "A PostgreSQL driver written in Golang for Python"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python",
+]
+
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/lucaslimafernandes/pggo"
+Issues = "https://github.com/lucaslimafernandes/pggo/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["pggo*"]
+
+[tool.setuptools.package-data]
+pggo = ["libpggo.so", "libpggo.dylib", "pggo.dll"]
