@@ -31,6 +31,10 @@ with pggo.connect(DSN) as conn:
         cur.execute("select * from cliente where id = $1", [1])
         print(cur.fetchall())
 
+with pggo.connect(DSN) as conn:
+    with conn.cursor() as cur:
+        cur.execute("select * from cliente where id = $1", [1])
+        print(cur.fetchone())
 
 # sem parametros
 with pggo.connect(DSN) as conn:
