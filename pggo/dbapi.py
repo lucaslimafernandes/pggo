@@ -1,5 +1,12 @@
 # Interface mínima "DB-API-like" (não 100% PEP 249 ainda)
-from ._binding import connect_json, close_json, query_json, exec_json
+from ._binding import (
+    connect_json, 
+    close_json, 
+    query_json, 
+    exec_json,
+    query_params_json,
+    exec_params_json,
+)
 
 class Error(Exception): ...
 class ProgrammingError(Error): ...
@@ -9,6 +16,17 @@ class Connection:
     def __init__(self, handle: int):
         self._h = handle
         self.closed = False
+
+    # Context manager -> with pggo.connect(...) as conn
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            self.close()
+        finally:
+            return False
+
 
     def cursor(self):
         return Cursor(self)
@@ -30,21 +48,52 @@ class Cursor:
         self._conn = conn
         self._last = None
         self.rowcount = -1
+        self.closed = False
 
-    def execute(self, sql: str):
+    # Context manager -> with conn.cursor() as cur
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+    
+    def close(self):
+        self._last = None
+        self.closed = True
+
+    def execute(self, sql: str, params=None):
+
+        if self.closed:
+            raise DatabaseError("cursor already closed")
+        
         sql_strip = sql.lstrip().lower()
         if sql_strip.startswith("select"):
-            r = query_json(self._conn._h, sql)
+
+            if params:
+                r = query_params_json(self._conn._h, sql, params)
+            else:
+                r = query_json(self._conn._h, sql)
+
             if isinstance(r, dict) and r.get("error"):
                 raise DatabaseError(r["error"])
+            
             self._last = r  # lista de dicts
             self.rowcount = len(self._last)
+
         else:
-            r = exec_json(self._conn._h, sql)
+
+            if params:
+                r = exec_params_json(self._conn._h, sql, params)
+            else:
+                r = exec_json(self._conn._h, sql)
+
             if r.get("error"):
                 raise DatabaseError(r["error"])
+            
             self._last = None
             self.rowcount = r.get("rows_affected", -1)
+        
         return self
 
     def fetchall(self):
