@@ -21,3 +21,24 @@ cur.execute("select 1 as x")
 print(cur.fetchall())  # [{'x': 1}]
 c.close()
 ```
+
+
+## Contributing
+
+Your contributions are welcome! If you encounter any bugs or have feature requests, please open an issue. To contribute code, follow these steps:
+
+Fork the repository.
+
+Clone your forked repository to your local machine.
+
+Create a new branch for your feature or bugfix (git checkout -b feature-name).
+
+Make your changes and commit them (git commit -m "Description of changes").
+
+Push your branch (git push origin feature-name).
+
+Open a pull request with a clear description of your changes.
+
+For more details, check the Contributing Guide.
+
+License This project is licensed under the MIT License. See the LICENSE file for more information.
