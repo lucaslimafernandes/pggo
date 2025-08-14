@@ -28,16 +28,27 @@ finally:
 # with na conexão + with no cursor
 with pggo.connect(DSN) as conn:
     with conn.cursor() as cur:
-        cur.execute("select * from cliente where id = $1", [1])
+        cur.query("select * from cliente where id = $1", [1])
         print(cur.fetchall())
 
 with pggo.connect(DSN) as conn:
     with conn.cursor() as cur:
-        cur.execute("select * from cliente where id = $1", [1])
+        cur.query("select * from cliente where id = $1", [1])
         print(cur.fetchone())
 
 # sem parametros
 with pggo.connect(DSN) as conn:
     with conn.cursor() as cur:
-        cur.execute("select * from cliente")
+        # cur.execute("select * from cliente")
+        cur.query("select * from cliente", fmt="json")
+        print(cur.fetchall())
+
+with pggo.connect(DSN) as conn:
+    with conn.cursor() as cur:
+        cur.query("SELECT generate_series(1, 10)")
+        print(cur.fetchall())
+
+with pggo.connect(DSN) as conn:
+    with conn.cursor() as cur:
+        cur.query("SELECT generate_series(1, 10)", fmt="json")
         print(cur.fetchall())

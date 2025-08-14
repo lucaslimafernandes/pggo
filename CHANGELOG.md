@@ -15,7 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-## [0.1.0] - 2025-08-13
+## [1.2.0] - 2025-08-14
+
+### Added
+
+- Add Connection Pool
+- Add list return
+
+### Changed
+
+- Change to Go about function decision
+- Conn to Pool
+
+## [1.1.1] - 2025-08-13
 
 ### Added
 

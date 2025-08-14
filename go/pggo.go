@@ -6,17 +6,22 @@ package main
 import "C"
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type connWrap struct {
 	conn *pgx.Conn
+}
+
+type poolWrap struct {
+	conn *pgxpool.Pool
 }
 
 var (
@@ -24,37 +29,8 @@ var (
 	connTable sync.Map // id(uint64) -> *connWrap
 )
 
-func jsonErr(err error) []byte {
-	msg, _ := json.Marshal(err.Error())
-	return []byte(fmt.Sprintf(`{"error":%s}`, string(msg)))
-}
-
-func rowsToJSON(rows pgx.Rows) ([]byte, error) {
-
-	var out []map[string]any
-
-	field_description := rows.FieldDescriptions()
-
-	for rows.Next() {
-		vals, err := rows.Values()
-		if err != nil {
-			return nil, err
-		}
-
-		row := make(map[string]any, len(vals))
-		for i, fd := range field_description {
-			row[string(fd.Name)] = vals[i]
-		}
-		out = append(out, row)
-
-	}
-
-	return json.Marshal(out)
-
-}
-
-//export ConnectJSON
-func ConnectJSON(conninfo *C.char) *C.char {
+//export Connect
+func Connect(conninfo *C.char) *C.char {
 
 	ci := C.GoString(conninfo)
 	ctx := context.Background()
@@ -73,141 +49,65 @@ func ConnectJSON(conninfo *C.char) *C.char {
 
 }
 
-//export CloseJSON
-func CloseJSON(handle C.ulonglong) *C.char {
+//export ConnectPool
+func ConnectPool(conninfo *C.char) *C.char {
 
-	id := uint64(handle)
-	v, ok := connTable.Load(id)
-	if !ok {
-		return C.CString(`{"ok":false, "error":}`)
-	}
-
-	w := v.(*connWrap)
+	ci := C.GoString(conninfo)
 	ctx := context.Background()
 
-	err := w.conn.Close(ctx)
+	cfg, err := pgxpool.ParseConfig(ci)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
 
-	connTable.Delete(id)
+	cfg.MaxConns = 10
+	cfg.MinConns = 1
+	cfg.HealthCheckPeriod = 1 * time.Minute
 
-	return C.CString(`{"ok":true}`)
-
-}
-
-//export QueryJSON
-func QueryJSON(handle C.ulonglong, query *C.char) *C.char {
-
-	id := uint64(handle)
-	v, ok := connTable.Load(id)
-	if !ok {
-		return C.CString(`{"error":"invalid handle"}`)
-	}
-
-	q := C.GoString(query)
-	ctx := context.Background()
-
-	rows, err := v.(*connWrap).conn.Query(ctx, q)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
-	}
-	defer rows.Close()
-
-	data, err := rowsToJSON(rows)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
 
-	return C.CString(string(data))
+	id := atomic.AddUint64(&hCounter, 1)
+	connTable.Store(id, &poolWrap{conn: pool})
 
-}
-
-//export ExecJSON
-func ExecJSON(handle C.ulonglong, query *C.char) *C.char {
-
-	id := uint64(handle)
-	v, ok := connTable.Load(id)
-	if !ok {
-		return C.CString(`{"error":"invalid handle"}`)
-	}
-
-	q := C.GoString(query)
-	ctx := context.Background()
-
-	ct, err := v.(*connWrap).conn.Exec(ctx, q)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
-	}
-
-	resp := fmt.Sprintf(`{"rows_affected":%d}`, ct.RowsAffected())
+	resp := fmt.Sprintf(`{"handle":%d}`, id)
 
 	return C.CString(resp)
 
 }
 
-//export QueryParamsJSON
-func QueryParamsJSON(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+//export Execute
+func Execute(handle C.ulonglong, query *C.char, params *C.char, format *C.char) *C.char {
 
 	id := uint64(handle)
-
-	v, ok := connTable.Load(id)
-	if !ok {
-		return C.CString(`{"error":"invalid handle"}`)
-	}
 
 	q := C.GoString(query)
 	p := C.GoString(params)
 
-	args, err := jsonToArgs([]byte(p))
-	if err != nil {
-		return C.CString(string(jsonErr(fmt.Errorf("bad params json: %w", err))))
+	if len(p) == 0 {
+		return exec(id, q)
+	} else {
+		return execParams(id, q, p)
 	}
-
-	ctx := context.Background()
-	rows, err := v.(*connWrap).conn.Query(ctx, q, args...)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
-	}
-	defer rows.Close()
-
-	data, err := rowsToJSON(rows)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
-	}
-
-	return C.CString(string(data))
 
 }
 
-//export ExecParamsJSON
-func ExecParamsJSON(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+//export Query
+func Query(handle C.ulonglong, query *C.char, params *C.char, format *C.char) *C.char {
 
 	id := uint64(handle)
 
-	v, ok := connTable.Load(id)
-	if !ok {
-		return C.CString(`{"error":"invalid handle"}`)
-	}
-
 	q := C.GoString(query)
 	p := C.GoString(params)
+	f := C.GoString(format)
 
-	args, err := jsonToArgs([]byte(p))
-	if err != nil {
-		return C.CString(string(jsonErr(fmt.Errorf("bad params json: %w", err))))
+	if len(p) == 0 {
+		return queryExecute(id, q, f)
+	} else {
+		return queryParamsExecute(id, q, p, f)
 	}
-
-	ctx := context.Background()
-
-	ct, err := v.(*connWrap).conn.Exec(ctx, q, args...)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
-	}
-
-	resp := fmt.Sprintf(`{"rosw_affected":%d}`, ct.RowsAffected())
-
-	return C.CString(resp)
 
 }
 
