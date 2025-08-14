@@ -2,8 +2,6 @@
 from ._binding import (
     connect_json, 
     close_json, 
-    query_json, 
-    exec_json,
     query_params_json,
     exec_params_json,
 )
@@ -62,37 +60,30 @@ class Cursor:
         self._last = None
         self.closed = True
 
-    def execute(self, sql: str, params=None):
+    def query(self, sql: str, params=""):
 
         if self.closed:
             raise DatabaseError("cursor already closed")
         
-        sql_strip = sql.lstrip().lower()
-        if sql_strip.startswith("select"):
+        r = query_params_json(self._conn._h, sql, params)
 
-            if params:
-                r = query_params_json(self._conn._h, sql, params)
-            else:
-                r = query_json(self._conn._h, sql)
+        if isinstance(r, dict) and r.get("error"):
+            raise DatabaseError(r["error"])
+        
+        self._last = r  # lista de dicts
+        self.rowcount = len(self._last)
 
-            if isinstance(r, dict) and r.get("error"):
-                raise DatabaseError(r["error"])
-            
-            self._last = r  # lista de dicts
-            self.rowcount = len(self._last)
+        return self
 
-        else:
+    def execute(self, sql: str, params=""):
 
-            if params:
-                r = exec_params_json(self._conn._h, sql, params)
-            else:
-                r = exec_json(self._conn._h, sql)
+        r = exec_params_json(self._conn._h, sql, params)
 
-            if r.get("error"):
-                raise DatabaseError(r["error"])
-            
-            self._last = None
-            self.rowcount = r.get("rows_affected", -1)
+        if r.get("error"):
+            raise DatabaseError(r["error"])
+        
+        self._last = None
+        self.rowcount = r.get("rows_affected", -1)
         
         return self
 

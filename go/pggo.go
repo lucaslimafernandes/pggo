@@ -96,19 +96,16 @@ func CloseJSON(handle C.ulonglong) *C.char {
 
 }
 
-//export QueryJSON
-func QueryJSON(handle C.ulonglong, query *C.char) *C.char {
+func queryJSON(handle uint64, query string) *C.char {
 
-	id := uint64(handle)
-	v, ok := connTable.Load(id)
+	v, ok := connTable.Load(handle)
 	if !ok {
 		return C.CString(`{"error":"invalid handle"}`)
 	}
 
-	q := C.GoString(query)
 	ctx := context.Background()
 
-	rows, err := v.(*connWrap).conn.Query(ctx, q)
+	rows, err := v.(*connWrap).conn.Query(ctx, query)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
@@ -123,19 +120,16 @@ func QueryJSON(handle C.ulonglong, query *C.char) *C.char {
 
 }
 
-//export ExecJSON
-func ExecJSON(handle C.ulonglong, query *C.char) *C.char {
+func execJSON(handle uint64, query string) *C.char {
 
-	id := uint64(handle)
-	v, ok := connTable.Load(id)
+	v, ok := connTable.Load(handle)
 	if !ok {
 		return C.CString(`{"error":"invalid handle"}`)
 	}
 
-	q := C.GoString(query)
 	ctx := context.Background()
 
-	ct, err := v.(*connWrap).conn.Exec(ctx, q)
+	ct, err := v.(*connWrap).conn.Exec(ctx, query)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
@@ -146,26 +140,20 @@ func ExecJSON(handle C.ulonglong, query *C.char) *C.char {
 
 }
 
-//export QueryParamsJSON
-func QueryParamsJSON(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+func queryParamsJSON(handle uint64, query string, params string) *C.char {
 
-	id := uint64(handle)
-
-	v, ok := connTable.Load(id)
+	v, ok := connTable.Load(handle)
 	if !ok {
 		return C.CString(`{"error":"invalid handle"}`)
 	}
 
-	q := C.GoString(query)
-	p := C.GoString(params)
-
-	args, err := jsonToArgs([]byte(p))
+	args, err := jsonToArgs([]byte(params))
 	if err != nil {
 		return C.CString(string(jsonErr(fmt.Errorf("bad params json: %w", err))))
 	}
 
 	ctx := context.Background()
-	rows, err := v.(*connWrap).conn.Query(ctx, q, args...)
+	rows, err := v.(*connWrap).conn.Query(ctx, query, args...)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
@@ -180,27 +168,21 @@ func QueryParamsJSON(handle C.ulonglong, query *C.char, params *C.char) *C.char 
 
 }
 
-//export ExecParamsJSON
-func ExecParamsJSON(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+func execParamsJSON(handle uint64, query string, params string) *C.char {
 
-	id := uint64(handle)
-
-	v, ok := connTable.Load(id)
+	v, ok := connTable.Load(handle)
 	if !ok {
 		return C.CString(`{"error":"invalid handle"}`)
 	}
 
-	q := C.GoString(query)
-	p := C.GoString(params)
-
-	args, err := jsonToArgs([]byte(p))
+	args, err := jsonToArgs([]byte(params))
 	if err != nil {
 		return C.CString(string(jsonErr(fmt.Errorf("bad params json: %w", err))))
 	}
 
 	ctx := context.Background()
 
-	ct, err := v.(*connWrap).conn.Exec(ctx, q, args...)
+	ct, err := v.(*connWrap).conn.Exec(ctx, query, args...)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
@@ -208,6 +190,38 @@ func ExecParamsJSON(handle C.ulonglong, query *C.char, params *C.char) *C.char {
 	resp := fmt.Sprintf(`{"rosw_affected":%d}`, ct.RowsAffected())
 
 	return C.CString(resp)
+
+}
+
+//export Execute
+func Execute(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+
+	id := uint64(handle)
+
+	q := C.GoString(query)
+	p := C.GoString(params)
+
+	if len(p) == 0 {
+		return execJSON(id, q)
+	} else {
+		return execParamsJSON(id, q, p)
+	}
+
+}
+
+//export Query
+func Query(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+
+	id := uint64(handle)
+
+	q := C.GoString(query)
+	p := C.GoString(params)
+
+	if len(p) == 0 {
+		return queryJSON(id, q)
+	} else {
+		return queryParamsJSON(id, q, p)
+	}
 
 }
 
