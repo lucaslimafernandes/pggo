@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pggo"
-version = "1.1.0"
+version = "1.1.1"
 authors = [
   { name="Lucas Lima Fernandes", email="lucas.lfernandes@live.com" },
 ]
@@ -28,8 +28,6 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
 [tool.setuptools]
-author = "Lucas Lima Fernandes"
-author_email = "lucas.lfernandes@live.com"
 include-package-data = true
 
 [project.urls]
