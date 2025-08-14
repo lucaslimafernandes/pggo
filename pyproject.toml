@@ -30,13 +30,11 @@ license-files = ["LICEN[CS]E*"]
 [tool.setuptools]
 author = "Lucas Lima Fernandes"
 author_email = "lucas.lfernandes@live.com"
+include-package-data = true
 
 [project.urls]
 Homepage = "https://github.com/lucaslimafernandes/pggo"
 Issues = "https://github.com/lucaslimafernandes/pggo/issues"
-
-[tool.setuptools]
-include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["pggo*"]
