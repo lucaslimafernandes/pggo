@@ -2,8 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
+
+func jsonErr(err error) []byte {
+	msg, _ := json.Marshal(err.Error())
+	return []byte(fmt.Sprintf(`{"error":%s}`, string(msg)))
+}
 
 // Parse an RFC3339 string as time if look like time.Time
 func tryParseTime(s string) (time.Time, bool) {
@@ -73,5 +81,44 @@ func jsonToArgs(raw []byte) ([]any, error) {
 	}
 
 	return out, nil
+
+}
+
+func rowsToList(rows pgx.Rows) ([]byte, error) {
+
+	var out [][]any
+
+	for rows.Next() {
+		vals, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vals)
+	}
+
+	return json.Marshal(out)
+}
+
+func rowsToJSON(rows pgx.Rows) ([]byte, error) {
+
+	var out []map[string]any
+
+	field_description := rows.FieldDescriptions()
+
+	for rows.Next() {
+		vals, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+
+		row := make(map[string]any, len(vals))
+		for i, fd := range field_description {
+			row[string(fd.Name)] = vals[i]
+		}
+		out = append(out, row)
+
+	}
+
+	return json.Marshal(out)
 
 }

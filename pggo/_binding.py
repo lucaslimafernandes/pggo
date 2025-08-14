@@ -13,10 +13,10 @@ LIB_PATH = Path(__file__).with_name(LIB_BASENAME)
 _lib = ctypes.CDLL(str(LIB_PATH))
 
 # assinaturas 
-# _lib.ConnectJSON.argtypes = [ctypes.c_char_p]
-# _lib.ConnectJSON.restype  = ctypes.c_void_p
-# _lib.CloseJSON.argtypes   = [ctypes.c_ulonglong]
-# _lib.CloseJSON.restype    = ctypes.c_void_p
+# _lib.Connect.argtypes = [ctypes.c_char_p]
+# _lib.Connect.restype  = ctypes.c_void_p
+# _lib.Close.argtypes   = [ctypes.c_ulonglong]
+# _lib.Close.restype    = ctypes.c_void_p
 _lib.FreeCString.argtypes = [ctypes.c_void_p]
 _lib.FreeCString.restype  = None
 
@@ -38,16 +38,16 @@ def _from_c(ptr):
     finally:
         _lib.FreeCString(ptr)
 
-def connect_json(conninfo: str):
+def _connect(conninfo: str):
     return _from_c(_lib.ConnectPool(conninfo.encode()))
 
-def close_json(handle: int):
+def _close(handle: int):
     return _from_c(_lib.ClosePool(handle))
 
-def exec_params_json(handle: int, sql: str, params=""):
+def _exec_params(handle: int, sql: str, params=""):
     p = json.dumps(params or []).encode()
     return _from_c(_lib.Execute(handle, sql.encode(), p))
 
-def query_params_json(handle: int, sql: str, params="", fmt=""):
+def _query_params(handle: int, sql: str, params="", fmt=""):
     p = json.dumps(params or []).encode()
     return _from_c(_lib.Query(handle, sql.encode(), p, fmt.encode()))

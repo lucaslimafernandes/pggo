@@ -1,9 +1,9 @@
 # Interface mínima "DB-API-like" (não 100% PEP 249 ainda)
 from ._binding import (
-    connect_json, 
-    close_json, 
-    query_params_json,
-    exec_params_json,
+    _connect, 
+    _close, 
+    _query_params,
+    _exec_params,
 )
 
 class Error(Exception): ...
@@ -32,7 +32,7 @@ class Connection:
     def close(self):
         if self.closed: 
             return
-        r = close_json(self._h)
+        r = _close(self._h)
         if r.get("error"):
             raise DatabaseError(r["error"])
         self.closed = True
@@ -65,7 +65,7 @@ class Cursor:
         if self.closed:
             raise DatabaseError("cursor already closed")
         
-        r = query_params_json(self._conn._h, sql, params, fmt)
+        r = _query_params(self._conn._h, sql, params, fmt)
 
         if isinstance(r, dict) and r.get("error"):
             raise DatabaseError(r["error"])
@@ -77,7 +77,7 @@ class Cursor:
 
     def execute(self, sql: str, params=""):
 
-        r = exec_params_json(self._conn._h, sql, params)
+        r = _exec_params(self._conn._h, sql, params)
 
         if r.get("error"):
             raise DatabaseError(r["error"])
@@ -98,7 +98,7 @@ class Cursor:
         return self._last.pop(0)
 
 def connect(conninfo: str) -> Connection:
-    r = connect_json(conninfo)
+    r = _connect(conninfo)
     if r.get("error"):
         raise DatabaseError(r["error"])
     return Connection(r["handle"])
