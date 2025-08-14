@@ -20,7 +20,6 @@ Exemplo de uso:
 """
 
 import time
-import random
 import statistics
 import json
 
@@ -107,7 +106,7 @@ def pggo_insert_single(conn, rows):
 def pggo_select_count(conn):
     with conn.cursor() as cur:
         t0 = time.perf_counter()
-        cur.execute("SELECT COUNT(*) AS c FROM bench_kv_go")
+        cur.query("SELECT COUNT(*) AS c FROM bench_kv_go")
         _ = cur.fetchone()              # ex.: {'c': 20000}
         elapsed = time.perf_counter() - t0
     return metrics([elapsed], 1)

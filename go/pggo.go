@@ -8,15 +8,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type connWrap struct {
 	conn *pgx.Conn
+}
+
+type poolWrap struct {
+	conn *pgxpool.Pool
 }
 
 var (
@@ -27,6 +34,21 @@ var (
 func jsonErr(err error) []byte {
 	msg, _ := json.Marshal(err.Error())
 	return []byte(fmt.Sprintf(`{"error":%s}`, string(msg)))
+}
+
+func rowsToList(rows pgx.Rows) ([]byte, error) {
+
+	var out [][]any
+
+	for rows.Next() {
+		vals, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vals)
+	}
+
+	return json.Marshal(out)
 }
 
 func rowsToJSON(rows pgx.Rows) ([]byte, error) {
@@ -73,6 +95,35 @@ func ConnectJSON(conninfo *C.char) *C.char {
 
 }
 
+//export ConnectPool
+func ConnectPool(conninfo *C.char) *C.char {
+
+	ci := C.GoString(conninfo)
+	ctx := context.Background()
+
+	cfg, err := pgxpool.ParseConfig(ci)
+	if err != nil {
+		return C.CString(string(jsonErr(err)))
+	}
+
+	cfg.MaxConns = 10
+	cfg.MinConns = 1
+	cfg.HealthCheckPeriod = 1 * time.Minute
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return C.CString(string(jsonErr(err)))
+	}
+
+	id := atomic.AddUint64(&hCounter, 1)
+	connTable.Store(id, &poolWrap{conn: pool})
+
+	resp := fmt.Sprintf(`{"handle":%d}`, id)
+
+	return C.CString(resp)
+
+}
+
 //export CloseJSON
 func CloseJSON(handle C.ulonglong) *C.char {
 
@@ -96,7 +147,28 @@ func CloseJSON(handle C.ulonglong) *C.char {
 
 }
 
-func queryJSON(handle uint64, query string) *C.char {
+//export ClosePool
+func ClosePool(handle C.ulonglong) *C.char {
+
+	id := uint64(handle)
+	v, ok := connTable.Load(id)
+	if !ok {
+		return C.CString(`{"ok":false, "error":}`)
+	}
+
+	w := v.(*poolWrap)
+
+	w.conn.Close()
+
+	connTable.Delete(id)
+
+	return C.CString(`{"ok":true}`)
+
+}
+
+func queryJSON(handle uint64, query string, format string) *C.char {
+
+	var data []byte
 
 	v, ok := connTable.Load(handle)
 	if !ok {
@@ -105,15 +177,22 @@ func queryJSON(handle uint64, query string) *C.char {
 
 	ctx := context.Background()
 
-	rows, err := v.(*connWrap).conn.Query(ctx, query)
+	rows, err := v.(*poolWrap).conn.Query(ctx, query)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
 	defer rows.Close()
 
-	data, err := rowsToJSON(rows)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
+	if strings.ToLower(format) == "json" {
+		data, err = rowsToJSON(rows)
+		if err != nil {
+			return C.CString(string(jsonErr(err)))
+		}
+	} else {
+		data, err = rowsToList(rows)
+		if err != nil {
+			return C.CString(string(jsonErr(err)))
+		}
 	}
 
 	return C.CString(string(data))
@@ -129,7 +208,7 @@ func execJSON(handle uint64, query string) *C.char {
 
 	ctx := context.Background()
 
-	ct, err := v.(*connWrap).conn.Exec(ctx, query)
+	ct, err := v.(*poolWrap).conn.Exec(ctx, query)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
@@ -140,7 +219,7 @@ func execJSON(handle uint64, query string) *C.char {
 
 }
 
-func queryParamsJSON(handle uint64, query string, params string) *C.char {
+func queryParamsJSON(handle uint64, query string, params string, format string) *C.char {
 
 	v, ok := connTable.Load(handle)
 	if !ok {
@@ -152,16 +231,24 @@ func queryParamsJSON(handle uint64, query string, params string) *C.char {
 		return C.CString(string(jsonErr(fmt.Errorf("bad params json: %w", err))))
 	}
 
+	var data []byte
 	ctx := context.Background()
-	rows, err := v.(*connWrap).conn.Query(ctx, query, args...)
+	rows, err := v.(*poolWrap).conn.Query(ctx, query, args...)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
 	defer rows.Close()
 
-	data, err := rowsToJSON(rows)
-	if err != nil {
-		return C.CString(string(jsonErr(err)))
+	if strings.ToLower(format) == "json" {
+		data, err = rowsToJSON(rows)
+		if err != nil {
+			return C.CString(string(jsonErr(err)))
+		}
+	} else {
+		data, err = rowsToList(rows)
+		if err != nil {
+			return C.CString(string(jsonErr(err)))
+		}
 	}
 
 	return C.CString(string(data))
@@ -182,19 +269,19 @@ func execParamsJSON(handle uint64, query string, params string) *C.char {
 
 	ctx := context.Background()
 
-	ct, err := v.(*connWrap).conn.Exec(ctx, query, args...)
+	ct, err := v.(*poolWrap).conn.Exec(ctx, query, args...)
 	if err != nil {
 		return C.CString(string(jsonErr(err)))
 	}
 
-	resp := fmt.Sprintf(`{"rosw_affected":%d}`, ct.RowsAffected())
+	resp := fmt.Sprintf(`{"rows_affected":%d}`, ct.RowsAffected())
 
 	return C.CString(resp)
 
 }
 
 //export Execute
-func Execute(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+func Execute(handle C.ulonglong, query *C.char, params *C.char, format *C.char) *C.char {
 
 	id := uint64(handle)
 
@@ -210,17 +297,18 @@ func Execute(handle C.ulonglong, query *C.char, params *C.char) *C.char {
 }
 
 //export Query
-func Query(handle C.ulonglong, query *C.char, params *C.char) *C.char {
+func Query(handle C.ulonglong, query *C.char, params *C.char, format *C.char) *C.char {
 
 	id := uint64(handle)
 
 	q := C.GoString(query)
 	p := C.GoString(params)
+	f := C.GoString(format)
 
 	if len(p) == 0 {
-		return queryJSON(id, q)
+		return queryJSON(id, q, f)
 	} else {
-		return queryParamsJSON(id, q, p)
+		return queryParamsJSON(id, q, p, f)
 	}
 
 }

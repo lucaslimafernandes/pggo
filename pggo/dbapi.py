@@ -60,12 +60,12 @@ class Cursor:
         self._last = None
         self.closed = True
 
-    def query(self, sql: str, params=""):
+    def query(self, sql: str, params="", fmt=""):
 
         if self.closed:
             raise DatabaseError("cursor already closed")
         
-        r = query_params_json(self._conn._h, sql, params)
+        r = query_params_json(self._conn._h, sql, params, fmt)
 
         if isinstance(r, dict) and r.get("error"):
             raise DatabaseError(r["error"])
